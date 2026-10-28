@@ -1,13 +1,18 @@
+
 """FestPass registration API (starter code)."""
+
 import os
 import signal
 import socket
 import sys
 import threading
 from contextlib import closing
+
 import psycopg2
 from flask import Flask, jsonify, request
+
 app = Flask(__name__)
+
 REGNO = os.getenv("REGNO", "NOT-SET")
 APP_VERSION = os.getenv("APP_VERSION", "dev")
 
@@ -15,7 +20,8 @@ TABLE_SQL = """CREATE TABLE IF NOT EXISTS registrations (
     id SERIAL PRIMARY KEY,
     name TEXT NOT NULL,
     event TEXT NOT NULL,
-    created TIMESTAMPTZ NOT NULL DEFAULT now())"""
+    created TIMESTAMPTZ NOT NULL DEFAULT now()
+)"""
 
 _table_lock = threading.Lock()
 _table_ready = False
@@ -32,7 +38,7 @@ def connect():
 
 
 def run_sql(sql, params=(), fetch=False):
-    """Create the table on first use, run one statement, commit and close."""
+    """Create the table on first use, run SQL, commit, and close."""
     global _table_ready
 
     with _table_lock:
@@ -49,6 +55,8 @@ def run_sql(sql, params=(), fetch=False):
 @app.errorhandler(psycopg2.Error)
 def database_error(err):
     return jsonify(error="database unavailable"), 503
+
+
 @app.get("/api/health")
 def health():
     try:
@@ -62,7 +70,7 @@ def health():
         regno=REGNO,
         version=APP_VERSION,
         container=socket.gethostname(),
-        database=database
+        database=database,
     )
 
 
@@ -70,14 +78,15 @@ def health():
 def list_registrations():
     rows = run_sql(
         "SELECT id, name, event, created FROM registrations ORDER BY id",
-        fetch=True
+        fetch=True,
     )
+
     return jsonify([
         {
             "id": i,
             "name": n,
             "event": e,
-            "created": c.isoformat(timespec="seconds")
+            "created": c.isoformat(timespec="seconds"),
         }
         for i, n, e, c in rows
     ])
@@ -86,6 +95,7 @@ def list_registrations():
 @app.post("/api/registrations")
 def add_registration():
     data = request.get_json(silent=True) or {}
+
     name = str(data.get("name", "")).strip()
     event = str(data.get("event", "")).strip()
 
@@ -95,12 +105,13 @@ def add_registration():
     new_id = run_sql(
         "INSERT INTO registrations (name, event) VALUES (%s, %s) RETURNING id",
         (name, event),
-        fetch=True
+        fetch=True,
     )[0][0]
-        return jsonify(id=new_id, name=name, event=event), 201
+
+    return jsonify(id=new_id, name=name, event=event), 201
 
 
 if __name__ == "__main__":
-    # Exit promptly on `docker stop` instead of waiting to be killed.
+    # Exit promptly on docker stop.
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     app.run(host="0.0.0.0", port=5000)
